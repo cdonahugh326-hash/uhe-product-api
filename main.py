@@ -20,8 +20,27 @@ def read_root():
     return {"message": "UHE Product API is Live!"}
 
 @app.get("/getProduct")
-def get_product(productName: str = Query(..., description="Product name to look up")):
-    result = df[df['Product Name'].str.lower() == productName.lower()]
-    if result.empty:
-        return {"error": "Product not found"}
-    return result.to_dict(orient='records')[0]
+def get_product(
+    productName: str = Query(..., description="Product name to look up"),
+    brandName: str = Query(None, description="Optional brand name to narrow results")
+):
+    # Fuzzy match for product name
+    filtered_df = df[df['Product Name'].str.lower().str.contains(productName.lower(), na=False)]
+
+    # Optional brand name filter
+    if brandName:
+        filtered_df = filtered_df[
+            filtered_df['Brand'].str.lower().str.contains(brandName.lower(), na=False)
+        ]
+
+    # Handle result
+    if filtered_df.empty:
+        return {"error": f"No match found for product '{productName}'" + (f" with brand '{brandName}'" if brandName else "")}
+    elif len(filtered_df) == 1:
+        return filtered_df.iloc[0].to_dict()
+    else:
+        return {
+            "multiple_matches": filtered_df[[
+                'Product Name', 'Variant', 'Brand', 'Category'
+            ]].dropna(how="all").to_dict(orient='records')
+        }
